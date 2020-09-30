@@ -21,6 +21,7 @@ type User struct {
 	UserName  string
 	Password  string
 	Email     string
+	Phone     string
 }
 
 //Review structure
@@ -57,6 +58,7 @@ func main() {
 
 	http.HandleFunc("/login", login)
 	http.HandleFunc("/register", signup)
+	http.HandleFunc("/updateUser", updateUser)
 	http.HandleFunc("/writereview", insertreview)
 	http.HandleFunc("/getreview", getreview)
 	http.HandleFunc("/updatereview", updatereview)
@@ -98,6 +100,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 		r.Form["username"][0],
 		r.Form["password"][0],
 		r.Form["email"][0],
+		r.Form["phone"][0],
 	}
 
 	insertResult, err := collection.InsertOne(context.TODO(), user)
@@ -109,6 +112,39 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Inserted a single document: ", insertResult.InsertedID)
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+
+}
+
+func updateUser(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	var update User
+	err := decoder.Decode(&update)
+	if err != nil {
+		log.Fatal("Decoding error")
+	}
+
+	query := bson.M{"username": update.UserName}
+	fmt.Println(update.UserName)
+	result, err := collection.ReplaceOne(context.TODO(), query, update)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Replaced %v Documents!\n", result.ModifiedCount)
+
+	var user User
+	err = collection.FindOne(context.TODO(), query).Decode(&user)
+	if err != nil {
+		w.Write([]byte("fail"))
+
+	}
+	js, err2 := json.Marshal(user)
+	if err2 != nil {
+		w.Write([]byte("fail"))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+	fmt.Println("Update User and return the data")
 
 }
 

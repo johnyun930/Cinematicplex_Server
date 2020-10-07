@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -24,6 +25,19 @@ type User struct {
 	Phone     string
 }
 
+type UpdateUser struct {
+	FirstName string
+	LastName  string
+	UserName  string
+	Email     string
+	Phone     string
+}
+
+type Message struct {
+	State   bool
+	Message string
+}
+
 //Review structure
 type Review struct {
 	ID       primitive.ObjectID `bson:"_id, omitempty"`
@@ -37,8 +51,8 @@ type Review struct {
 var clientOptions = options.Client().ApplyURI("mongodb://localhost:27017")
 var client, err = mongo.Connect(context.TODO(), clientOptions)
 var database = client.Database("movie")
-var collection = database.Collection("login")
-var reviewcollection = database.Collection("review")
+var loginCollection = database.Collection("login")
+var reviewCollection = database.Collection("review")
 
 func main() {
 
@@ -57,7 +71,7 @@ func main() {
 	fmt.Println("Connected to MongoDB!")
 
 	http.HandleFunc("/login", login)
-	http.HandleFunc("/register", signup)
+	http.HandleFunc("/signup", signup)
 	http.HandleFunc("/updateUser", updateUser)
 	http.HandleFunc("/writereview", insertreview)
 	http.HandleFunc("/getreview", getreview)
@@ -78,7 +92,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 	query := bson.M{"username": mem.UserName, "password": mem.Password}
 
-	err = collection.FindOne(context.TODO(), query).Decode(&result)
+	err = loginCollection.FindOne(context.TODO(), query).Decode(&result)
 	if err != nil {
 		w.Write([]byte("fail"))
 
@@ -93,31 +107,51 @@ func login(w http.ResponseWriter, r *http.Request) {
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	user := User{
-		r.Form["firstname"][0],
-		r.Form["lastname"][0],
-		r.Form["username"][0],
-		r.Form["password"][0],
-		r.Form["email"][0],
-		r.Form["phone"][0],
-	}
+	// r.ParseForm()
+	// user := User{
+	// 	r.Form["firstname"][0],
+	// 	r.Form["lastname"][0],
+	// 	r.Form["username"][0],
+	// 	r.Form["password"][0],
+	// 	r.Form["email"][0],
+	// 	r.Form["phone"][0],
+	// }
 
-	insertResult, err := collection.InsertOne(context.TODO(), user)
+	decoder := json.NewDecoder(r.Body)
+	fmt.Println(decoder)
+
+	var user, empty, search User
+	err := decoder.Decode(&user)
 	if err != nil {
-
-		log.Fatal(err)
+		panic(err)
 	}
 
-	fmt.Println("Inserted a single document: ", insertResult.InsertedID)
+	query := bson.M{"username": user.UserName}
+	loginCollection.FindOne(context.TODO(), query).Decode(&search)
+	fmt.Println(cmp.Equal(search, empty))
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	if cmp.Equal(search, empty) {
+		insertResult, err := loginCollection.InsertOne(context.TODO(), user)
+		if err != nil {
 
+			log.Fatal(err)
+		}
+
+		fmt.Println("Inserted a single document: ", insertResult.InsertedID)
+		var message Message = Message{true, "Your sign up is succeed!"}
+		packet, _ := json.Marshal(message)
+		w.Write(packet)
+	} else {
+		var message Message = Message{false, "The userid is existed already. Please use another userid"}
+		packet, _ := json.Marshal(message)
+		w.Write(packet)
+
+	}
 }
 
 func updateUser(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
-	var update User
+	var update UpdateUser
 	err := decoder.Decode(&update)
 	if err != nil {
 		log.Fatal("Decoding error")
@@ -125,14 +159,15 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 
 	query := bson.M{"username": update.UserName}
 	fmt.Println(update.UserName)
-	result, err := collection.ReplaceOne(context.TODO(), query, update)
+	result, err := loginCollection.UpdateOne(context.TODO(), query, bson.D{
+		{"$set", update}})
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("Replaced %v Documents!\n", result.ModifiedCount)
 
-	var user User
-	err = collection.FindOne(context.TODO(), query).Decode(&user)
+	var user UpdateUser
+	err = loginCollection.FindOne(context.TODO(), query).Decode(&user)
 	if err != nil {
 		w.Write([]byte("fail"))
 
@@ -157,7 +192,7 @@ func insertreview(w http.ResponseWriter, r *http.Request) {
 	review.ID = primitive.NewObjectID()
 	fmt.Println(review.ID)
 
-	insertResult, err := reviewcollection.InsertOne(context.TODO(), review)
+	insertResult, err := reviewCollection.InsertOne(context.TODO(), review)
 	if err != nil {
 
 		log.Fatal(err)
@@ -166,7 +201,7 @@ func insertreview(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Inserted a single document: ", insertResult.InsertedID)
 
 	query := bson.M{"movieid": review.MovieID}
-	cursor, err := reviewcollection.Find(context.TODO(), query)
+	cursor, err := reviewCollection.Find(context.TODO(), query)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -207,7 +242,7 @@ func deletereview(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println("this is id encoding error")
 	}
-	res, err := reviewcollection.DeleteOne(context.TODO(), bson.M{"_id": docid})
+	res, err := reviewCollection.DeleteOne(context.TODO(), bson.M{"_id": docid})
 	if err != nil {
 		fmt.Println("This is Delete result error")
 	}
@@ -218,7 +253,7 @@ func deletereview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := bson.M{"movieid": elem["movieid"]}
-	cursor, err := reviewcollection.Find(context.TODO(), query)
+	cursor, err := reviewCollection.Find(context.TODO(), query)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -258,14 +293,14 @@ func updatereview(w http.ResponseWriter, r *http.Request) {
 	currenttime := time.Now()
 	update.Date = currenttime.Format("2006-01-02")
 	query := bson.M{"_id": update.ID}
-	result, err := reviewcollection.ReplaceOne(context.TODO(), query, update)
+	result, err := reviewCollection.ReplaceOne(context.TODO(), query, update)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("Replaced %v Documents!\n", result.ModifiedCount)
 
 	query2 := bson.M{"movieid": update.MovieID}
-	cursor, err := reviewcollection.Find(context.TODO(), query2)
+	cursor, err := reviewCollection.Find(context.TODO(), query2)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -310,7 +345,7 @@ func getreview(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&id)
 	fmt.Println(id.MovieID)
 	query := bson.M{"movieid": id.MovieID}
-	cursor, err := reviewcollection.Find(context.TODO(), query)
+	cursor, err := reviewCollection.Find(context.TODO(), query)
 	if err != nil {
 		log.Fatal(err)
 	}

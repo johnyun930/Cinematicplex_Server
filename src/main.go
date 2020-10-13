@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -23,6 +25,11 @@ type User struct {
 	Password  string
 	Email     string
 	Phone     string
+}
+
+type CheckUser struct {
+	UserName string
+	Password string
 }
 
 type UpdateUser struct {
@@ -77,45 +84,126 @@ func main() {
 	http.HandleFunc("/getreview", getreview)
 	http.HandleFunc("/updatereview", updatereview)
 	http.HandleFunc("/deletereview", deletereview)
+	http.HandleFunc("/confirmPassword", confirmPassword)
+	http.HandleFunc("/changePassword", changePassword)
+	http.HandleFunc("/test", test)
+	http.Handle("/profile/", http.StripPrefix("/profile", http.FileServer(http.Dir("./Image"))))
+	//http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./build/"))))
+
 	http.ListenAndServe(":8000", nil)
+}
+func test(w http.ResponseWriter, r *http.Request) {
+
+	r.ParseMultipartForm(10 << 20)
+	fmt.Println(r.Form["username"][0])
+	// file, handler, err := r.FormFile("userImage")
+	// if err != nil {
+	// 	fmt.Println("Error Retrieving the File")
+	// 	fmt.Println(err)
+	// 	return
+	// }
+	// defer file.Close()
+
+	// f, err := os.OpenFile("./Image/tpdms120/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
+
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+
+	// defer f.Close()
+	//io.Copy(f, file)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
 	// var result User
 	decoder := json.NewDecoder(r.Body)
-
-	var mem, result User
+	var mem CheckUser
+	var result User
 	err := decoder.Decode(&mem)
 
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println(mem.UserName)
 	query := bson.M{"username": mem.UserName, "password": mem.Password}
 
 	err = loginCollection.FindOne(context.TODO(), query).Decode(&result)
 	if err != nil {
-		w.Write([]byte("fail"))
+		var msg = Message{false, "You type wrong userid or Password. Please try again"}
+		js, err := json.Marshal(msg)
+		if err != nil {
+			panic(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(js)
+
+		return
 
 	}
 	js, err2 := json.Marshal(result)
 	if err2 != nil {
 		w.Write([]byte("fail"))
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(js)
 
 }
 
+func confirmPassword(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+
+	var mem, check CheckUser
+
+	err := decoder.Decode(&mem)
+	if err != nil {
+		panic(err)
+	}
+	query := bson.M{"username": mem.UserName, "password": mem.Password}
+	err = loginCollection.FindOne(context.TODO(), query).Decode(&check)
+	var msg Message
+	if err != nil {
+		msg = Message{false, "Password is not correct"}
+	} else {
+		msg = Message{true, " "}
+
+	}
+	js, err := json.Marshal(msg)
+	if err != nil {
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+
+}
+
+func changePassword(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+
+	var mem CheckUser
+
+	err := decoder.Decode(&mem)
+	if err != nil {
+		panic(err)
+	}
+	query := bson.M{"username": mem.UserName}
+	_, err = loginCollection.UpdateOne(context.TODO(), query, bson.D{{"$set", mem}})
+	var msg Message
+	if err != nil {
+		msg = Message{false, "Fail to change the password. Try again"}
+	} else {
+		msg = Message{true, "Password is changed successfully!"}
+	}
+	js, err := json.Marshal(msg)
+	if err != nil {
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+}
+
 func signup(w http.ResponseWriter, r *http.Request) {
-	// r.ParseForm()
-	// user := User{
-	// 	r.Form["firstname"][0],
-	// 	r.Form["lastname"][0],
-	// 	r.Form["username"][0],
-	// 	r.Form["password"][0],
-	// 	r.Form["email"][0],
-	// 	r.Form["phone"][0],
-	// }
 
 	decoder := json.NewDecoder(r.Body)
 	fmt.Println(decoder)
@@ -141,6 +229,21 @@ func signup(w http.ResponseWriter, r *http.Request) {
 		var message Message = Message{true, "Your sign up is succeed!"}
 		packet, _ := json.Marshal(message)
 		w.Write(packet)
+		os.Mkdir("./Image/"+user.UserName, os.ModePerm)
+		noImage, err := os.Open("./Image/noImage.jpg")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer noImage.Close()
+		userImage, err := os.OpenFile("./Image/"+user.UserName+"/"+user.UserName+".jpg", os.O_WRONLY|os.O_CREATE, 0666)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer noImage.Close()
+		io.Copy(userImage, noImage)
+
 	} else {
 		var message Message = Message{false, "The userid is existed already. Please use another userid"}
 		packet, _ := json.Marshal(message)
@@ -150,13 +253,14 @@ func signup(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateUser(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	var update UpdateUser
-	err := decoder.Decode(&update)
-	if err != nil {
-		log.Fatal("Decoding error")
+	r.ParseMultipartForm(10 << 20)
+	update := UpdateUser{
+		r.Form["firstName"][0],
+		r.Form["lastName"][0],
+		r.Form["username"][0],
+		r.Form["email"][0],
+		r.Form["phone"][0],
 	}
-
 	query := bson.M{"username": update.UserName}
 	fmt.Println(update.UserName)
 	result, err := loginCollection.UpdateOne(context.TODO(), query, bson.D{
@@ -180,6 +284,23 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(js)
 	fmt.Println("Update User and return the data")
+	file, handler, err := r.FormFile("userImage")
+	if err != nil {
+		fmt.Println("Error Retrieving the File")
+		fmt.Println(err)
+		return
+	}
+	defer file.Close()
+
+	f, err := os.OpenFile("./Image/"+update.UserName+"/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	defer f.Close()
+	io.Copy(f, file)
 
 }
 

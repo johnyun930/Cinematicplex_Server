@@ -88,35 +88,10 @@ func main() {
 	http.HandleFunc("/changePassword", changePassword)
 	http.HandleFunc("/test", test)
 	http.Handle("/profile/", http.StripPrefix("/profile", http.FileServer(http.Dir("./Image"))))
-	//http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./build/"))))
-
 	http.ListenAndServe(":8000", nil)
-}
-func test(w http.ResponseWriter, r *http.Request) {
-
-	r.ParseMultipartForm(10 << 20)
-	fmt.Println(r.Form["username"][0])
-	// file, handler, err := r.FormFile("userImage")
-	// if err != nil {
-	// 	fmt.Println("Error Retrieving the File")
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// defer file.Close()
-
-	// f, err := os.OpenFile("./Image/tpdms120/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
-
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-
-	// defer f.Close()
-	//io.Copy(f, file)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	// var result User
 	decoder := json.NewDecoder(r.Body)
 	var mem CheckUser
 	var result User
@@ -125,7 +100,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(mem.UserName)
 	query := bson.M{"username": mem.UserName, "password": mem.Password}
 
 	err = loginCollection.FindOne(context.TODO(), query).Decode(&result)
@@ -206,7 +180,6 @@ func changePassword(w http.ResponseWriter, r *http.Request) {
 func signup(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
-	fmt.Println(decoder)
 
 	var user, empty, search User
 	err := decoder.Decode(&user)
@@ -216,7 +189,6 @@ func signup(w http.ResponseWriter, r *http.Request) {
 
 	query := bson.M{"username": user.UserName}
 	loginCollection.FindOne(context.TODO(), query).Decode(&search)
-	fmt.Println(cmp.Equal(search, empty))
 
 	if cmp.Equal(search, empty) {
 		insertResult, err := loginCollection.InsertOne(context.TODO(), user)
@@ -262,7 +234,6 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		r.Form["phone"][0],
 	}
 	query := bson.M{"username": update.UserName}
-	fmt.Println(update.UserName)
 	result, err := loginCollection.UpdateOne(context.TODO(), query, bson.D{
 		{"$set", update}})
 	if err != nil {
@@ -311,8 +282,6 @@ func insertreview(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&review)
 	review.Date = currenttime.Format("2006-01-02")
 	review.ID = primitive.NewObjectID()
-	fmt.Println(review.ID)
-
 	insertResult, err := reviewCollection.InsertOne(context.TODO(), review)
 	if err != nil {
 
@@ -394,13 +363,11 @@ func deletereview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	js, err2 := json.Marshal(result)
-	fmt.Println(result)
 	if err2 != nil {
 		w.Write([]byte("No review"))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(js)
-	fmt.Println("get Reivews")
 
 }
 
@@ -426,7 +393,6 @@ func updatereview(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 	var reviews []*Review
-	fmt.Println("This is updatetreivew")
 	for cursor.Next(context.TODO()) {
 		var elem Review
 		err := cursor.Decode(&elem)
@@ -449,22 +415,12 @@ func updatereview(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 	fmt.Println("Update Review and return the data")
 
-	// var elem map[string]string
-	// err := decoder.Decode(&elem)
-	// if err != nil {
-	// 	fmt.Println("Decoder Error")
-	// }
-	// for key, val := range elem {
-	// 	fmt.Println(key, val)
-	// }
-
 }
 
 func getreview(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var id Review
 	err := decoder.Decode(&id)
-	fmt.Println(id.MovieID)
 	query := bson.M{"movieid": id.MovieID}
 	cursor, err := reviewCollection.Find(context.TODO(), query)
 	if err != nil {
@@ -486,7 +442,6 @@ func getreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	js, err2 := json.Marshal(result)
-	fmt.Println(result)
 	if err2 != nil {
 		w.Write([]byte("No review"))
 	}

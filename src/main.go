@@ -86,33 +86,10 @@ func main() {
 	http.HandleFunc("/deletereview", deletereview)
 	http.HandleFunc("/confirmPassword", confirmPassword)
 	http.HandleFunc("/changePassword", changePassword)
-	http.HandleFunc("/test", test)
-	http.Handle("/profile/", http.StripPrefix("/profile", http.FileServer(http.Dir("./Image"))))
-	//http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./build/"))))
+	http.Handle("/", http.FileServer(http.Dir("./build")))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./build/static"))))
 
 	http.ListenAndServe(":8000", nil)
-}
-func test(w http.ResponseWriter, r *http.Request) {
-
-	r.ParseMultipartForm(10 << 20)
-	fmt.Println(r.Form["username"][0])
-	// file, handler, err := r.FormFile("userImage")
-	// if err != nil {
-	// 	fmt.Println("Error Retrieving the File")
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// defer file.Close()
-
-	// f, err := os.OpenFile("./Image/tpdms120/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
-
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-
-	// defer f.Close()
-	//io.Copy(f, file)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
